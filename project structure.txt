@@ -1,0 +1,13 @@
+EchoStream/
+│ server.py
+│ redis_config.py
+│ requirements.txt
+│
+├── templates/
+│ ├── index.html
+│
+├── static/
+│ ├── videos/
+│ ├── js/
+│ └── css/
+│ └── style.css

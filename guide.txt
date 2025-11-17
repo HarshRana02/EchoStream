@@ -1,0 +1,69 @@
+EchoStream/
+│ server.py
+│ redis_config.py
+│ requirements.txt
+│
+├── templates/
+│ ├── index.html
+│
+├── static/
+│ ├── videos/
+│ ├── js/
+│ └── css/
+│ └── style.css
+
+Prerequisite:
+
+Step 1: Install Docker
+    1. Command to see your active container: docker ps
+
+Step 2: Install Redis
+    1. Open your terminal or PowerShell and run this command: 
+        docker run -d --name EchoStream -p 6379:6379 redis:latest (This starts a Redis server in the background, on the correct port (6379), and it will restart automatically.)
+    2. To check if it's working: Open a new terminal and type redis-cli ping. If it replies with PONG, you are ready.
+
+Step 3: Set Up Python & Install Packages:
+    1. Navigate into your project folder: cd EchoStream
+    2. Create a virtual environment (named venv): python3 -n venv venv
+    3. Activate venv: source venv/bin/activate
+    4. Install required packages: pip install -r requirements.txt
+
+Step 4: Run the server:
+    1. Make sure your Redis server is running (from Step 1).
+    2. Make sure your virtual environment is active (from Step 3).
+    3. Start the server: python3 server.py
+
+Commands: 
+    1. Start the Docker Service: sudo systemctl start docker
+    2. Docker to start automatically when the computer boots: sudo systemctl enable docker
+    3. Check that it's running with systemctl status docker: 
+
+    4. Start the Redis Container:
+        * This is the command that uses Docker to download and run your Redis database. You only need to do this once: docker run -d --name EchoStream -p 6379:6379 redis:latest
+        * If you get an error that the name vidsync-redis is already in use, it means an old container exists. Remove it first with docker rm vidsync-redis and then run the command again.
+
+    5. Verify Everything: docker ps (You should see EchoStream in the list)
+
+    6. Allow Port 5000 Through Your Firewall: sudo ufw allow 5000/tcp
+
+
+
+---------------------------------------------------------------------------
+
+sudo systemctl start docker
+Start your Redis container: (This downloads and runs Redis. You only need to run this once ever on this machine.)
+
+If you run this again, it will say EchoStream already exists. That's fine. You can check if it's running with docker ps.
+    docker run -d --name EchoStream -p 6379:6379 redis:latest
+
+Create a Python Virtual Environment: (This creates a private venv folder for your packages. You only do this once.)
+    python3 -m venv venv
+
+python -m venv venv
+Activate the Virtual Environment: (You must do this every time you open a new terminal.)
+
+Your terminal prompt will change to show (venv).
+    source venv/bin/activate
+
+Install the Python Packages: (This reads requirements.txt and installs Flask, SocketIO, etc. into your venv.)
+    pip install -r requirements.txt

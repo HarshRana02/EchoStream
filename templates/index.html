@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync Video</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Video Sync</h1>
+            <div class="status-box">
+                <p>Status: <strong id="connection-status" class="disconnected">Disconnected</strong></p>
+                <p>Your Role: <strong id="role-status">Viewer</strong></p>
+                <p>Controller: <strong id="controller-status">None</strong></p>
+            </div>
+        </header>
+
+        <main>
+            <div class="video-container">
+                <video id="video-player" width="100%">
+                    <source src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            
+            <!-- 
+                Custom controls have been removed.
+                We now rely on the video element's native controls,
+                which are enabled/disabled by client.js.
+            -->
+
+            <div class="upload-section">
+                <h2>Upload New Video</h2>
+                <p>Uploading a new video will make you the controller and sync all clients.</p>
+                <form id="upload-form">
+                    <input type="file" id="file-input" name="file" accept="video/mp4,video/webm,video/ogg">
+                    <button type="submit" class="upload-btn">Upload & Sync</button>
+                </form>
+                <div id="upload-status"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Socket.IO Client Library (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    
+    <!-- Our custom client-side logic -->
+    <script src="{{ url_for('static', filename='js/client.js') }}"></script>
+</body>
+</html>
