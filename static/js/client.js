@@ -3,76 +3,77 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Global State ---
     let isController = false;
     let localSID = null;
-    let isSeeking = false; // Flag to prevent event loops during seek
-    let isServerSyncing = false; // Flag to prevent event loops during server sync
+    let isSeeking = false; 
+    let isServerSyncing = false; 
     let antiDriftInterval = null;
+    let hasJoined = false; 
+
+    // --- Configuration ---
+    // Add a small offset to account for network transmission time (200ms)
+    const LATENCY_COMPENSATION = 0.2; 
+    // Tighter drift threshold for better sync (250ms)
+    const DRIFT_THRESHOLD = 0.25;
 
     // --- DOM Elements ---
     const video = document.getElementById('video-player');
     const statusConnection = document.getElementById('connection-status');
     const statusRole = document.getElementById('role-status');
     const statusController = document.getElementById('controller-status');
-
-    // Upload elements (visible to all)
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('file-input');
     const uploadStatus = document.getElementById('upload-status');
+    const joinOverlay = document.getElementById('join-overlay');
+    const joinBtn = document.getElementById('join-btn');
 
-    // --- WebSocket Connection (CRITICAL FIX) ---
+    // --- WebSocket Connection ---
     const socket = io({
-        // --- FIX: 'transports' option REMOVED ---
-        // This allows Socket.IO to fall back to HTTP long-polling
-        // if the WebSocket connection is blocked by a firewall.
-        // This makes the connection much more reliable and fixes errors.
+        transports: ['websocket', 'polling'],
         reconnectionAttempts: 5,
     });
 
+    // --- Join / Audio Unlock Logic ---
+    if (joinBtn) {
+        joinBtn.addEventListener('click', () => {
+            video.play().then(() => {
+                video.pause();
+            }).catch(e => console.log("Audio unlock attempt:", e));
+            
+            hasJoined = true;
+            joinOverlay.style.display = 'none';
+            socket.emit('request_sync');
+        });
+    }
+
     // --- Utility Functions ---
 
-    /**
-     * Updates the UI to reflect controller status.
-     * Disables/enables controls based on role.
-     */
     function updateControls() {
         if (isController) {
             statusRole.textContent = 'Controller';
             statusRole.className = 'controller';
-            
-            // Show native video controls
             video.controls = true; 
-
         } else {
             statusRole.textContent = 'Viewer';
             statusRole.className = 'viewer';
-            
-            // Viewers should *not* be able to control the video
             video.controls = false; 
         }
     }
 
-    /**
-     * Performs an anti-drift sync check.
-     */
     function checkDrift() {
-        if (isController || !video.src) {
-            return;
-        }
+        if (isController || !video.src || video.readyState < 1 || !hasJoined) return;
         socket.emit('request_sync');
     }
 
-    /**
-     * Synchronizes the client's video player to the server's state.
-     */
     function syncToState(state) {
-        console.log('Syncing to server state:', state);
-        
-        isServerSyncing = true;
+        if (!hasJoined) return;
 
         // 1. Sync Video Source
         if (state.video_file_url && video.src.endsWith(state.video_file_url) === false) {
             console.log(`Loading new video: ${state.video_file_url}`);
+            isServerSyncing = true;
             video.src = state.video_file_url;
             video.load();
+            setTimeout(() => { isServerSyncing = false; }, 500);
+            return;
         }
 
         // 2. Sync Time (Drift Correction)
@@ -80,17 +81,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const clientTime = video.currentTime;
         const drift = Math.abs(serverTime - clientTime);
 
-        if (drift > 0.350) { // 350ms threshold
-            console.warn(`Correcting drift. Server: ${serverTime}, Client: ${clientTime}, Drift: ${drift}`);
+        // We only correct drift if:
+        // a. It is larger than our threshold
+        // b. We are NOT currently in a "server sync" action (like seeking)
+        if (drift > DRIFT_THRESHOLD && !isServerSyncing) { 
+            console.warn(`Drift Correction: Server=${serverTime.toFixed(3)}, Client=${clientTime.toFixed(3)}, Drift=${drift.toFixed(3)}`);
             video.currentTime = serverTime;
         }
 
         // 3. Sync Play/Pause State
         if (state.is_playing && video.paused) {
-            console.log('Server: Play');
-            video.play().catch(e => console.error('Play interrupted:', e));
+            attemptPlay();
         } else if (!state.is_playing && !video.paused) {
-            console.log('Server: Pause');
             video.pause();
         }
 
@@ -98,115 +100,119 @@ document.addEventListener('DOMContentLoaded', () => {
         isController = (state.controller_sid === localSID);
         statusController.textContent = state.controller_sid || 'None';
         updateControls();
-
-        setTimeout(() => { isServerSyncing = false; }, 100);
     }
 
+    function attemptPlay() {
+        if (!hasJoined) return;
+        var playPromise = video.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn("Autoplay prevented or loading.");
+            });
+        }
+    }
 
-    // --- Socket.IO Event Handlers (Server -> Client) ---
+    // --- Socket.IO Event Handlers ---
 
     socket.on('connect', () => {
         localSID = socket.id;
-        console.log(`Connected to server with SID: ${localSID}`);
+        console.log(`Connected: ${localSID}`);
         statusConnection.textContent = 'Connected';
         statusConnection.className = 'connected';
-        
         if (antiDriftInterval) clearInterval(antiDriftInterval);
-        antiDriftInterval = setInterval(checkDrift, 2000);
+        // Check drift more frequently (every 1s instead of 2s)
+        antiDriftInterval = setInterval(checkDrift, 1000);
     });
 
     socket.on('disconnect', () => {
-        console.log('Disconnected from server.');
         statusConnection.textContent = 'Disconnected';
         statusConnection.className = 'disconnected';
         statusRole.textContent = 'Viewer';
-        statusController.textContent = 'None';
         isController = false;
         updateControls();
-        
         if (antiDriftInterval) clearInterval(antiDriftInterval);
     });
 
-    socket.on('connect_error', (err) => {
-        console.error('Connection error:', err.message);
-        statusConnection.textContent = `Error: ${err.message}`;
-        statusConnection.className = 'disconnected'; // Show error state
-    });
-
-    socket.on('sync_state', (state) => {
-        syncToState(state);
-    });
+    socket.on('sync_state', (state) => syncToState(state));
 
     socket.on('video_loaded', (data) => {
-        console.log(`Server loaded new video: ${data.url}`);
+        console.log(`Video Loaded Event: ${data.url}`);
         isServerSyncing = true;
         video.src = data.url;
         video.load();
         video.pause();
         video.currentTime = 0;
-        // Clear any previous upload statuses
-        if (uploadStatus) {
-             uploadStatus.textContent = '';
-             uploadStatus.className = '';
-        }
-        setTimeout(() => { isServerSyncing = false; }, 100);
+        if (uploadStatus) { uploadStatus.textContent = ''; uploadStatus.className = ''; }
+        setTimeout(() => { isServerSyncing = false; }, 500);
     });
 
     socket.on('sync_play', (data) => {
-        if (isController) return; // Controller already played locally
-        console.log('Received PLAY command');
-        isServerSyncing = true;
-        video.currentTime = data.time;
-        video.play().catch(e => console.error('Play interrupted:', e));
-        setTimeout(() => { isServerSyncing = false; }, 100);
+        if (isController) return; 
+        
+        // Apply Latency Compensation
+        const targetTime = data.time + LATENCY_COMPENSATION;
+        console.log(`SYNC: PLAY at ${data.time} (+${LATENCY_COMPENSATION}s offset)`);
+        
+        // Only jump if we are significantly off, otherwise just play
+        if (Math.abs(video.currentTime - targetTime) > DRIFT_THRESHOLD) {
+            video.currentTime = targetTime;
+        }
+        attemptPlay();
     });
 
     socket.on('sync_pause', (data) => {
-        if (isController) return; // Controller already paused locally
-        console.log('Received PAUSE command');
-        isServerSyncing = true;
+        if (isController) return; 
+        console.log(`SYNC: PAUSE at ${data.time}`);
         video.pause();
-        video.currentTime = data.time;
-        setTimeout(() => { isServerSyncing = false; }, 100);
+        
+        // Ensure we pause at the exact frame
+        if (Math.abs(video.currentTime - data.time) > DRIFT_THRESHOLD) {
+            video.currentTime = data.time; 
+        }
     });
 
     socket.on('sync_seek', (data) => {
-        if (isController) return; // Controller already seeked locally
-        console.log(`Received SEEK command to ${data.time}`);
+        if (isController) return; 
+        console.log(`SYNC: SEEK to ${data.time}`);
+        
         isServerSyncing = true;
         video.currentTime = data.time;
-        setTimeout(() => { isServerSyncing = false; }, 100);
+        
+        // Force a re-sync shortly after the seek settles
+        // This fixes the "stuck after forward" issue
+        setTimeout(() => { 
+            isServerSyncing = false; 
+            socket.emit('request_sync');
+        }, 1000);
     });
 
     socket.on('controller_change', (data) => {
-        console.log(`New controller: ${data.controller_sid}`);
+        console.log(`New Controller: ${data.controller_sid}`);
         const oldIsController = isController;
         isController = (data.controller_sid === localSID);
         statusController.textContent = data.controller_sid || 'None';
         updateControls();
 
-        // This is now the "success" message for uploading
         if (isController && !oldIsController) {
-             uploadStatus.textContent = `Upload successful! You are the new controller.`;
-             uploadStatus.className = 'success';
+             if (uploadStatus) {
+                 uploadStatus.textContent = `Upload successful! You are the new controller.`;
+                 uploadStatus.className = 'success';
+             }
         }
     });
 
 
-    // --- DOM Event Handlers (Client -> Server) ---
+    // --- DOM Event Handlers ---
 
-    // --- Video Element Event Listeners (for controller) ---
     video.addEventListener('play', () => {
-        // We only send an event if we are the controller AND
-        // the event was not triggered by the server.
         if (!isController || isServerSyncing || isSeeking) return;
-        console.log('Video event: PLAY');
+        console.log("Emitting PLAY");
         socket.emit('play', { time: video.currentTime });
     });
 
     video.addEventListener('pause', () => {
         if (!isController || isServerSyncing || isSeeking) return;
-        console.log('Video event: PAUSE');
+        console.log("Emitting PAUSE");
         socket.emit('pause', { time: video.currentTime });
     });
 
@@ -218,59 +224,37 @@ document.addEventListener('DOMContentLoaded', () => {
     video.addEventListener('seeked', () => {
         if (!isController || isServerSyncing) return;
         isSeeking = false;
-        console.log(`Video event: SEEKED to ${video.currentTime}`);
+        console.log("Emitting SEEK");
         socket.emit('seek', { time: video.currentTime });
     });
     
-
-    // --- File Upload Handler ---
+    // Upload Form
     if (uploadForm) {
         uploadForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            
-            if (!fileInput.files || fileInput.files.length === 0) {
-                uploadStatus.textContent = 'Please select a file first.';
-                uploadStatus.className = 'error';
-                return;
-            }
-            
-            if (!localSID) {
-                uploadStatus.textContent = 'Not connected to server. Cannot upload.';
-                uploadStatus.className = 'error';
-                return;
-            }
+            if (!fileInput.files.length) return;
+            if (!localSID) return;
 
-            const file = fileInput.files[0];
             const formData = new FormData();
-            formData.append('file', file);
-            formData.append('sid', localSID); // Send our SID
+            formData.append('file', fileInput.files[0]);
+            formData.append('sid', localSID); 
 
             uploadStatus.textContent = 'Uploading...';
             uploadStatus.className = '';
 
-            // "Fire-and-forget" the fetch request to prevent connection reset errors
-            fetch('/upload', {
-                method: 'POST',
-                body: formData,
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (!result.success) {
-                    // Show an error if the upload *itself* failed
-                    uploadStatus.textContent = `Upload failed: ${result.error}`;
-                    uploadStatus.className = 'error';
+            fetch('/upload', { method: 'POST', body: formData })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                         uploadStatus.textContent = `Error: ${err.error}`;
+                         uploadStatus.className = 'error';
+                    });
                 }
-                // If it IS a success, we do nothing. We wait
-                // for the 'controller_change' websocket event to confirm.
             })
             .catch(error => {
-                // Handle network errors
-                console.error('Upload error:', error);
-                uploadStatus.textContent = `Upload failed: ${error.message}`;
+                uploadStatus.textContent = `Error: ${error.message}`;
                 uploadStatus.className = 'error';
             });
         });
     }
 });
-
-

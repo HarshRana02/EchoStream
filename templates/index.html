@@ -7,6 +7,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    <!-- NEW: Join Overlay to unlock Audio -->
+    <div id="join-overlay">
+        <div class="join-box">
+            <h2>Join Watch Party</h2>
+            <p>Click below to connect and enable audio.</p>
+            <button id="join-btn">Join Now</button>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>Video Sync</h1>
@@ -19,17 +28,12 @@
 
         <main>
             <div class="video-container">
-                <video id="video-player" width="100%">
+                <!-- playsinline is required for iOS/Android sync -->
+                <video id="video-player" width="100%" playsinline>
                     <source src="" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
             </div>
-            
-            <!-- 
-                Custom controls have been removed.
-                We now rely on the video element's native controls,
-                which are enabled/disabled by client.js.
-            -->
 
             <div class="upload-section">
                 <h2>Upload New Video</h2>
