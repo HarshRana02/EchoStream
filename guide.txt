@@ -18,9 +18,10 @@ Step 1: Install Docker
     1. Command to see your active container: docker ps
 
 Step 2: Install Redis
-    1. Open your terminal or PowerShell and run this command: 
+    1. Run redis in docker not in the OS.
+    2. Open your terminal or PowerShell and run this command: 
         docker run -d --name EchoStream -p 6379:6379 redis:latest (This starts a Redis server in the background, on the correct port (6379), and it will restart automatically.)
-    2. To check if it's working: Open a new terminal and type redis-cli ping. If it replies with PONG, you are ready.
+    3. To check if it's working: Open a new terminal and type redis-cli ping. If it replies with PONG, you are ready.
 
 Step 3: Set Up Python & Install Packages:
     1. Navigate into your project folder: cd EchoStream
@@ -33,10 +34,14 @@ Step 4: Run the server:
     2. Make sure your virtual environment is active (from Step 3).
     3. Start the server: python3 server.py
 
+Step 5: Test the server
+    1. For server PC: http://0.0.0.0:5000 or http://127.0.0.1:5000
+    2. For other devices: https://<IP_ADDRESS>:5000
+
 Commands: 
     1. Start the Docker Service: sudo systemctl start docker
     2. Docker to start automatically when the computer boots: sudo systemctl enable docker
-    3. Check that it's running with systemctl status docker: 
+    3. Check that it's running with systemctl status docker
 
     4. Start the Redis Container:
         * This is the command that uses Docker to download and run your Redis database. You only need to do this once: docker run -d --name EchoStream -p 6379:6379 redis:latest
