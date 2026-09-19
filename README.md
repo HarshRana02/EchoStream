@@ -62,7 +62,3 @@ Then open:
 ```text
 http://localhost:5000
 ```
-
-- How does controller election work when a Socket.IO client disconnects?
-- Can you review the Redis synchronization logic in `server.py` for race conditions?
-- How does `client.js` prevent playback drift between viewers?
